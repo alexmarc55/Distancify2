@@ -17,6 +17,23 @@ public class RepositoryLogin implements IRepository<Login, String> {
 
     public RepositoryLogin(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all logins");
+        String sql = "DELETE FROM login";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} login(s) from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all logins", e);
+            throw new RuntimeException("Failed to delete all logins: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All logins deleted");
     }
 
     @Override

@@ -17,6 +17,23 @@ public class RepositoryPolice implements IRepository<Police, Integer> {
 
     public RepositoryPolice(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all locations");
+        String sql = "DELETE FROM police";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} police from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all police", e);
+            throw new RuntimeException("Failed to delete all police: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All police deleted");
     }
 
     @Override

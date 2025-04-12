@@ -1,13 +1,12 @@
 package repository;
 
 import domain.Emergency;
+import domain.ServiceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.Properties;
 
 public class RepositoryEmergency implements IRepository<Emergency, String> {
@@ -17,12 +16,29 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
 
     public RepositoryEmergency(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all emergencies");
+        String sql = "DELETE FROM emergencies";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} emergency from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all emergencies", e);
+            throw new RuntimeException("Failed to delete all emergencies: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All emergencies deleted");
     }
 
     @Override
     public Emergency save(Emergency entity) {
         logger.traceEntry("Saving emergency: {}", entity);
-        String sql = "INSERT INTO emergencies(city, county, latitude, longitude, quantity) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO emergencies(city, county, latitude, longitude, quantity_ambulance, quantity_police, quantity_fire) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -31,7 +47,9 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
             stmt.setString(2, entity.getCounty());
             stmt.setDouble(3, entity.getLatitude());
             stmt.setDouble(4, entity.getLongitude());
-            stmt.setInt(5, entity.getQuantity());
+            stmt.setInt(5, entity.getQuantities().getOrDefault(ServiceType.Medical, 0));
+            stmt.setInt(6, entity.getQuantities().getOrDefault(ServiceType.Police, 0));
+            stmt.setInt(7, entity.getQuantities().getOrDefault(ServiceType.Fire, 0));
 
             stmt.executeUpdate();
 
@@ -48,7 +66,7 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
     @Override
     public Optional<Emergency> findById(String city) {
         logger.traceEntry("Finding emergency by city: {}", city);
-        String sql = "SELECT * FROM emergencies WHERE city = ? LIMIT 1"; // assumes city is unique or takes first
+        String sql = "SELECT * FROM emergencies WHERE city = ? LIMIT 1";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -57,12 +75,17 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
+                Map<ServiceType, Integer> quantities = new EnumMap<>(ServiceType.class);
+                quantities.put(ServiceType.Medical, rs.getInt("quantity_ambulance"));
+                quantities.put(ServiceType.Police, rs.getInt("quantity_police"));
+                quantities.put(ServiceType.Fire, rs.getInt("quantity_fire"));
+
                 Emergency emergency = new Emergency(
                         rs.getString("city"),
                         rs.getString("county"),
                         rs.getDouble("latitude"),
                         rs.getDouble("longitude"),
-                        rs.getInt("quantity")
+                        quantities
                 );
                 logger.trace("Found emergency: {}", emergency);
                 logger.traceExit("Exiting findById()");
@@ -89,12 +112,17 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
+                Map<ServiceType, Integer> quantities = new EnumMap<>(ServiceType.class);
+                quantities.put(ServiceType.Medical, rs.getInt("quantity_ambulance"));
+                quantities.put(ServiceType.Police, rs.getInt("quantity_police"));
+                quantities.put(ServiceType.Fire, rs.getInt("quantity_fire"));
+
                 Emergency emergency = new Emergency(
                         rs.getString("city"),
                         rs.getString("county"),
                         rs.getDouble("latitude"),
                         rs.getDouble("longitude"),
-                        rs.getInt("quantity")
+                        quantities
                 );
                 emergencies.add(emergency);
             }
@@ -131,7 +159,7 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
     @Override
     public Emergency update(Emergency entity) {
         logger.traceEntry("Updating emergency: {}", entity);
-        String sql = "UPDATE emergencies SET county = ?, latitude = ?, longitude = ?, quantity = ? WHERE city = ?";
+        String sql = "UPDATE emergencies SET county = ?, latitude = ?, longitude = ?, quantity_ambulance = ?, quantity_police = ?, quantity_fire = ? WHERE city = ?";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -139,8 +167,10 @@ public class RepositoryEmergency implements IRepository<Emergency, String> {
             stmt.setString(1, entity.getCounty());
             stmt.setDouble(2, entity.getLatitude());
             stmt.setDouble(3, entity.getLongitude());
-            stmt.setInt(4, entity.getQuantity());
-            stmt.setString(5, entity.getCity());
+            stmt.setInt(4, entity.getQuantities().getOrDefault(ServiceType.Medical, 0));
+            stmt.setInt(5, entity.getQuantities().getOrDefault(ServiceType.Police, 0));
+            stmt.setInt(6, entity.getQuantities().getOrDefault(ServiceType.Fire, 0));
+            stmt.setString(7, entity.getCity());
 
             stmt.executeUpdate();
 

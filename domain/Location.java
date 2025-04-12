@@ -7,7 +7,6 @@ public class Location {
     private double longitude;
 
     public Location() {}
-
     public Location(String name, String county, double latitude, double longitude) {
         this.name = name;
         this.county = county;

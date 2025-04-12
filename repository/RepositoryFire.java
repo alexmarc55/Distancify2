@@ -17,6 +17,23 @@ public class RepositoryFire implements IRepository<Fire, Integer> {
 
     public RepositoryFire(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all fires");
+        String sql = "DELETE FROM fire";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} fire(s) from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all fires", e);
+            throw new RuntimeException("Failed to delete all fires: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All fires deleted");
     }
 
     @Override

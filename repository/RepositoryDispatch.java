@@ -16,8 +16,25 @@ public class RepositoryDispatch implements IRepository<Dispatch, Integer> {
     private final JdbcUtils jdbcUtils;
     protected static final Logger logger = LogManager.getLogger();
 
-    public RepositoryDispatch(Properties props) {
+    public RepositoryLocation(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all dispatches");
+        String sql = "DELETE FROM dispatches";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} dispatch(es) from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all dispatches", e);
+            throw new RuntimeException("Failed to delete all dispatches: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All dispatches deleted");
     }
 
     @Override

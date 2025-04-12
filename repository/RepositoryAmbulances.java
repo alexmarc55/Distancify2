@@ -1,166 +1,194 @@
 package repository;
 
-import domain.Ambulances;
+import domain.Emergency;
+import domain.ServiceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.Properties;
 
-public class RepositoryAmbulances implements IRepository<Ambulances, Integer> {
+public class RepositoryEmergency implements IRepository<Emergency, Integer> {
 
     private final JdbcUtils jdbcUtils;
     protected static final Logger logger = LogManager.getLogger();
 
-    public RepositoryAmbulances(Properties properties) {
-        this.jdbcUtils = new JdbcUtils(properties);
+    public RepositoryEmergency(Properties props) {
+        this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all emergencies");
+        String sql = "DELETE FROM emergencies";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} emergency records", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting emergencies", e);
+            throw new RuntimeException("Failed to delete all emergencies: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All emergencies deleted");
     }
 
     @Override
-    public Ambulances save(Ambulances ambulance) {
-        logger.traceEntry("Saving ambulance: {}", ambulance);
-        String sql = "INSERT INTO ambulances(county, city, latitude, longitude, quantity) VALUES (?, ?, ?, ?, ?)";
+    public Emergency save(Emergency entity) {
+        logger.traceEntry("Saving emergency: {}", entity);
+        String sql = "INSERT INTO emergencies(city, county, latitude, longitude, quantity_ambulance, quantity_police, quantity_fire) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
-            stmt.setString(1, ambulance.getCounty());
-            stmt.setString(2, ambulance.getCity());
-            stmt.setDouble(3, ambulance.getLatitude());
-            stmt.setDouble(4, ambulance.getLongitude());
-            stmt.setInt(5, ambulance.getQuantity());
+            stmt.setString(1, entity.getCity());
+            stmt.setString(2, entity.getCounty());
+            stmt.setDouble(3, entity.getLatitude());
+            stmt.setDouble(4, entity.getLongitude());
+            stmt.setInt(5, entity.getQuantities().getOrDefault(ServiceType.MEDICAL, 0));
+            stmt.setInt(6, entity.getQuantities().getOrDefault(ServiceType.POLICE, 0));
+            stmt.setInt(7, entity.getQuantities().getOrDefault(ServiceType.FIRE, 0));
 
             stmt.executeUpdate();
 
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    ambulance.setId(generatedKeys.getInt(1));
+            try (ResultSet keys = stmt.getGeneratedKeys()) {
+                if (keys.next()) {
+                    entity.setId(keys.getInt(1));
                 }
             }
 
         } catch (SQLException e) {
-            logger.error("Error saving ambulance: {}", ambulance, e);
-            throw new RuntimeException("Failed to save ambulance: " + e.getMessage(), e);
+            logger.error("Error saving emergency: {}", entity, e);
+            throw new RuntimeException("Failed to save emergency", e);
         }
 
-        logger.trace("Saved ambulance: {}", ambulance);
+        logger.trace("Saved emergency: {}", entity);
         logger.traceExit("Exiting save()");
-        return ambulance;
+        return entity;
     }
 
     @Override
-    public Optional<Ambulances> findById(Integer id) {
-        logger.traceEntry("Finding ambulance by ID: {}", id);
-        String sql = "SELECT * FROM ambulances WHERE id = ?";
+    public Optional<Emergency> findById(Integer id) {
+        logger.traceEntry("Finding emergency by ID: {}", id);
+        String sql = "SELECT * FROM emergencies WHERE id = ?";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-
             stmt.setInt(1, id);
-            ResultSet rs = stmt.executeQuery();
 
-            if (rs.next()) {
-                Ambulances ambulance = new Ambulances(
-                        rs.getString("county"),
-                        rs.getString("city"),
-                        rs.getDouble("latitude"),
-                        rs.getDouble("longitude"),
-                        rs.getInt("quantity")
-                );
-                ambulance.setId(rs.getInt("id"));
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    Map<ServiceType, Integer> quantities = new HashMap<>();
+                    quantities.put(ServiceType.MEDICAL, rs.getInt("quantity_ambulance"));
+                    quantities.put(ServiceType.POLICE, rs.getInt("quantity_police"));
+                    quantities.put(ServiceType.FIRE, rs.getInt("quantity_fire"));
 
-                logger.trace("Found ambulance: {}", ambulance);
-                logger.traceExit("Exiting findById()");
-                return Optional.of(ambulance);
+                    Emergency emergency = new Emergency(
+                            rs.getString("city"),
+                            rs.getString("county"),
+                            rs.getDouble("latitude"),
+                            rs.getDouble("longitude"),
+                            quantities
+                    );
+                    emergency.setId(id);
+
+                    logger.trace("Found emergency: {}", emergency);
+                    logger.traceExit();
+                    return Optional.of(emergency);
+                }
             }
 
         } catch (SQLException e) {
-            logger.error("Error finding ambulance with ID: {}", id, e);
-            throw new RuntimeException("Failed to find ambulance: " + e.getMessage(), e);
+            logger.error("Error finding emergency by ID: {}", id, e);
+            throw new RuntimeException("Failed to find emergency", e);
         }
 
-        logger.traceExit("No ambulance found with ID: {}", id);
+        logger.traceExit("No emergency found for ID: {}", id);
         return Optional.empty();
     }
 
     @Override
-    public List<Ambulances> findAll() {
-        logger.traceEntry("Fetching all ambulances");
-        List<Ambulances> ambulances = new ArrayList<>();
-        String sql = "SELECT * FROM ambulances";
+    public List<Emergency> findAll() {
+        logger.traceEntry("Fetching all emergencies");
+        List<Emergency> emergencies = new ArrayList<>();
+        String sql = "SELECT * FROM emergencies";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
-                Ambulances ambulance = new Ambulances(
-                        rs.getString("county"),
+                Map<ServiceType, Integer> quantities = new HashMap<>();
+                quantities.put(ServiceType.MEDICAL, rs.getInt("quantity_ambulance"));
+                quantities.put(ServiceType.POLICE, rs.getInt("quantity_police"));
+                quantities.put(ServiceType.FIRE, rs.getInt("quantity_fire"));
+
+                Emergency emergency = new Emergency(
                         rs.getString("city"),
+                        rs.getString("county"),
                         rs.getDouble("latitude"),
                         rs.getDouble("longitude"),
-                        rs.getInt("quantity")
+                        quantities
                 );
-                ambulance.setId(rs.getInt("id"));
-                ambulances.add(ambulance);
+                emergency.setId(rs.getInt("id"));
+                emergencies.add(emergency);
             }
 
         } catch (SQLException e) {
-            logger.error("Error fetching ambulances", e);
-            throw new RuntimeException("Failed to fetch ambulances: " + e.getMessage(), e);
+            logger.error("Error fetching emergencies", e);
+            throw new RuntimeException("Failed to fetch emergencies", e);
         }
 
-        logger.trace("Fetched {} ambulances", ambulances.size());
+        logger.trace("Fetched {} emergencies", emergencies.size());
         logger.traceExit("Exiting findAll()");
-        return ambulances;
+        return emergencies;
     }
 
     @Override
     public void deleteById(Integer id) {
-        logger.traceEntry("Deleting ambulance by ID: {}", id);
-        String sql = "DELETE FROM ambulances WHERE id = ?";
+        logger.traceEntry("Deleting emergency by ID: {}", id);
+        String sql = "DELETE FROM emergencies WHERE id = ?";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, id);
             stmt.executeUpdate();
-
         } catch (SQLException e) {
-            logger.error("Error deleting ambulance by ID: {}", id, e);
-            throw new RuntimeException("Failed to delete ambulance: " + e.getMessage(), e);
+            logger.error("Error deleting emergency with ID: {}", id, e);
+            throw new RuntimeException("Failed to delete emergency", e);
         }
 
-        logger.trace("Deleted ambulance with ID: {}", id);
+        logger.trace("Deleted emergency with ID: {}", id);
         logger.traceExit("Exiting deleteById()");
     }
 
     @Override
-    public Ambulances update(Ambulances ambulance) {
-        logger.traceEntry("Updating ambulance: {}", ambulance);
-        String sql = "UPDATE ambulances SET county = ?, city = ?, latitude = ?, longitude = ?, quantity = ? WHERE id = ?";
+    public Emergency update(Emergency entity) {
+        logger.traceEntry("Updating emergency: {}", entity);
+        String sql = "UPDATE emergencies SET county = ?, latitude = ?, longitude = ?, quantity_ambulance = ?, quantity_police = ?, quantity_fire = ? WHERE city = ?";
 
         try (Connection conn = jdbcUtils.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setString(1, ambulance.getCounty());
-            stmt.setString(2, ambulance.getCity());
-            stmt.setDouble(3, ambulance.getLatitude());
-            stmt.setDouble(4, ambulance.getLongitude());
-            stmt.setInt(5, ambulance.getQuantity());
-            stmt.setInt(6, ambulance.getId());
+            stmt.setString(1, entity.getCounty());
+            stmt.setDouble(2, entity.getLatitude());
+            stmt.setDouble(3, entity.getLongitude());
+            stmt.setInt(4, entity.getQuantities().getOrDefault(ServiceType.MEDICAL, 0));
+            stmt.setInt(5, entity.getQuantities().getOrDefault(ServiceType.POLICE, 0));
+            stmt.setInt(6, entity.getQuantities().getOrDefault(ServiceType.FIRE, 0));
+            stmt.setString(7, entity.getCity());
 
             stmt.executeUpdate();
 
         } catch (SQLException e) {
-            logger.error("Error updating ambulance: {}", ambulance, e);
-            throw new RuntimeException("Failed to update ambulance: " + e.getMessage(), e);
+            logger.error("Error updating emergency: {}", entity, e);
+            throw new RuntimeException("Failed to update emergency", e);
         }
 
-        logger.trace("Updated ambulance: {}", ambulance);
+        logger.trace("Updated emergency: {}", entity);
         logger.traceExit("Exiting update()");
-        return ambulance;
+        return entity;
     }
 }

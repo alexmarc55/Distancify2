@@ -17,9 +17,27 @@ public class RepositoryLocation implements IRepository<Location, String> {
 
     public RepositoryLocation(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
     }
 
-    @Override
+    private void deleteAll() {
+        logger.traceEntry("Deleting all locations");
+        String sql = "DELETE FROM locations";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} location(s) from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all locations", e);
+            throw new RuntimeException("Failed to delete all locations: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All locations deleted");
+    }
+
+
+@Override
     public Location save(Location entity) {
         logger.traceEntry("Saving location: {}", entity);
         String sql = "INSERT INTO locations(name, county, latitude, longitude) VALUES (?, ?, ?, ?)";

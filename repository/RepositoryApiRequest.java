@@ -17,6 +17,23 @@ public class RepositoryApiRequest implements IRepository<ApiRequest, Integer> {
 
     public RepositoryApiRequest(Properties props) {
         this.jdbcUtils = new JdbcUtils(props);
+        deleteAll();
+    }
+
+    private void deleteAll() {
+        logger.traceEntry("Deleting all locations");
+        String sql = "DELETE FROM api_requests";
+
+        try (Connection conn = jdbcUtils.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            int rows = stmt.executeUpdate();
+            logger.trace("Deleted {} api request(s) from table", rows);
+        } catch (SQLException e) {
+            logger.error("Error deleting all api requests", e);
+            throw new RuntimeException("Failed to delete all api requests: " + e.getMessage(), e);
+        }
+
+        logger.traceExit("All api requests deleted");
     }
 
     @Override

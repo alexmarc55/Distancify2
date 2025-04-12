@@ -1,22 +1,25 @@
 package domain;
 
+import java.util.Map;
+
 public class Emergency {
     private int id;
     private String city;
     private String county;
     private double latitude;
     private double longitude;
-    private int quantity;
+    private Map<ServiceType, Integer> quantities;
 
-    public Emergency(String city, String county, double latitude, double longitude, int quantity) {}
+    public Emergency() {}
 
-    public Emergency(String city, String county, double latitude, double longitude, int quantity, boolean resolved) {
+    public Emergency(String city, String county, double latitude, double longitude, Map<ServiceType, Integer> quantities) {
         this.city = city;
         this.county = county;
         this.latitude = latitude;
         this.longitude = longitude;
-        this.quantity = quantity;
+        this.quantities = quantities;
     }
+
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
 
@@ -32,7 +35,6 @@ public class Emergency {
     public double getLongitude() { return longitude; }
     public void setLongitude(double longitude) { this.longitude = longitude; }
 
-    public int getQuantity() { return quantity; }
-    public void setQuantity(int quantity) { this.quantity = quantity; }
-
+    public Map<ServiceType, Integer> getQuantities() { return quantities; }
+    public void setQuantities(Map<ServiceType, Integer> quantities) { this.quantities = quantities; }
 }
